@@ -782,6 +782,12 @@ save_excursion_save (union specbinding *pdl)
 {
   eassert (pdl->unwind_excursion.kind == SPECPDL_UNWIND_EXCURSION);
   pdl->unwind_excursion.marker = Fpoint_marker ();
+  /* Suggested by John Shahid <jvshahid@gmail.com> in the "call-process and
+   * incremental display of output" thread of help-gnu-emacs.
+   * This matches the manually-created behavior of compile.el's process filter
+   * and probably others like comint as well.  */
+  XMARKER (pdl->unwind_excursion.marker)->insertion_type
+    = !NILP (Vwindow_point_insertion_type);
   /* Selected window if current buffer is shown in it, nil otherwise.  */
   pdl->unwind_excursion.window
     = (EQ (XWINDOW (selected_window)->contents, Fcurrent_buffer ())
