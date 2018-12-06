@@ -2943,8 +2943,9 @@ See `term-prompt-regexp'."
                       ;; delete previous text regardless of
                       ;; `term-insert-mode's value.
                       (delete-region (point) (line-end-position))
+                      ;; move to column 0 on the following line. we know we're at term-width
+                      (term-move-columns (- term-width))
                       (term-down 1 t)
-                      (term-move-columns (- (term-current-column)))
                       (put-text-property (1- (point)) (point) 'term-newline t)
                       (setq decoded-substring
                             (substring decoded-substring (- term-width old-column)))
@@ -3733,12 +3734,12 @@ all pending output has been dealt with."))
     (unless (and (= (term-current-row) 0) (< down 0))
       (term-adjust-current-row-cache down)
       (when (or (/= (point) (point-max)) (< down 0))
-	(setq down (- down (term-vertical-motion down)))))
+	(setq down (- down (term-vertical-motion down)))
+        (setq term-current-column nil)
+        (setq term-start-line-column nil)))
     (cond ((>= down 0)
 	   ;; Extend buffer with extra blank lines if needed.
-	   (term-insert-char ?\n down)
-	   (setq term-current-column 0)
-	   (setq term-start-line-column 0))
+	   (term-insert-char ?\n down))
 	  (t
 	   (when (= (term-current-row) 0)
 	     ;; Insert lines if at the beginning.
@@ -3749,9 +3750,7 @@ all pending output has been dealt with."))
 		 (forward-line term-height)
 		 (setq p (point))
 		 (forward-line (- down))
-		 (delete-region p (point)))))
-	   (setq term-current-column 0)
-	   (setq term-start-line-column (current-column))))
+		 (delete-region p (point)))))))
     (when start-column
       (term-move-columns start-column))))
 
