@@ -2664,11 +2664,11 @@ See `term-prompt-regexp'."
 
 (defun term-buffer-vertical-motion (count)
   (cond ((= count 0)
-	 (move-to-column (* term-width (/ (current-column) term-width)))
-	 0)
+           (move-to-column 0)
+           0)
 	((> count 0)
 	 (let ((H)
-	       (todo (+ count (/ (current-column) term-width))))
+	       (todo count))
 	   (end-of-line)
 	   ;; The loop iterates over buffer lines;
 	   ;; H is the number of screen lines in the current line, i.e.
@@ -2681,10 +2681,11 @@ See `term-prompt-regexp'."
 	     (setq todo (- todo H))
 	     (forward-char) ;; Move past the ?\n
 	     (end-of-line)) ;; and on to the end of the next line.
-	   (if (and (>= todo H) (> todo 0))
-	       (+ (- count todo) H -1) ;; Hit end of buffer.
-	     (move-to-column (* todo term-width))
-	     count)))
+           (unless (/= (- count todo) count)
+             ;; we are expected to be at bol unless we didn't move
+             ;; COUNT lines down
+             (move-to-column 0))
+           (- count todo)))
 	(t ;; (< count 0) ;; Similar algorithm, but for upward motion.
 	 (let ((H)
 	       (todo (- count)))
@@ -2697,9 +2698,9 @@ See `term-prompt-regexp'."
 	     (setq todo (- todo H))
 	     (backward-char)) ;; Move to end of previous line.
 	   (if (and (>= todo H) (> todo 0))
-	       (+ count todo (- 1 H)) ;; Hit beginning of buffer.
-	     (move-to-column (* (- H todo 1) term-width))
-	     count)))))
+	       (setq H (1- H))) ;; Hit beginning of buffer.
+           (move-to-column 0)
+           (+ count todo)))))
 
 ;; The term-start-line-column variable is used as a cache.
 (defun term-start-line-column ()
