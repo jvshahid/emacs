@@ -96,6 +96,77 @@ first line\r_next line\r\n"))
                           "abcde"
                           "    j"))))
 
+ (should (equal "abcdefg\nhijklmn\nopqrtst\nuvwxyz"
+                 (term-test-screen-from-input
+                  7 5
+                  '("abc"
+                    "def"
+                    "ghi"
+                    "jkl"
+                    "mno"
+                    "pqr"
+                    "tst"
+                    "uvw"
+                    "xyz"))))
+
+  (should (equal "bcdefgh\nijklmno\npqrtstu\nvwxyz\n"
+                 (term-test-screen-from-input
+                  7 5
+                  '("abcdefghijklmnopqrtstuvwxyz"
+                    "\e[H"
+                    "\e[P"
+                    "\e[6C"
+                    "hi"
+                    "\e[P"
+                    "\e[5C"
+                    "op"
+                    "\e[P"
+                    "\e[5C"
+                    "uv"
+                    "\e[P"
+                    "\e[4C"
+                    "\e[K"))))
+
+  (should (equal "XXXXOOO\nXXX"
+                 (term-test-screen-from-input
+                  7 3
+                  `(,(make-string 10 ?X)
+                    "\e[H"
+                    "\e[4C"
+                    "\e[3P"
+                    "OOO"))))
+
+  (should (equal "boooooo\nooo"
+                 (term-test-screen-from-input
+                  7 3
+                  '("fooooooooo"
+                    "[A"
+                    "b"))))
+
+  (should (equal "reset\n\n"
+                 (term-test-screen-from-input
+                  7 3
+                  '("fooooooooo"
+                    "\e[A"
+                    "\e[3D"
+                    "reset"
+                    "\e[K"
+                    "\e[1B"
+                    "\r"
+                    "\e[K"
+                    "\e[A"
+                    "\e[5C"))))
+
+  (should (equal "foooooo\nooob"
+                 (term-test-screen-from-input
+                  7 3
+                  '("fooooooooo"
+                    "\e[A"
+                    ""
+                    "\e[1B"
+                    "\e[2C"
+                    "b"))))
+
   ;; Relative positioning.
   (should (equal "ab\ncd"
                  (term-test-screen-from-input
