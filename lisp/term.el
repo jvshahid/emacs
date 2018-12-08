@@ -1106,6 +1106,7 @@ Entry to this mode runs the hooks on `term-mode-hook'."
   (make-local-variable 'term-scroll-show-maximum-output)
   (make-local-variable 'term-ptyp)
   (make-local-variable 'term-exec-hook)
+  (setq-local filter-buffer-substring-function 'term-filter-buffer-substring)
   (set (make-local-variable 'term-vertical-motion) 'vertical-motion)
   (set (make-local-variable 'term-pending-delete-marker) (make-marker))
   (make-local-variable 'term-current-face)
@@ -1132,9 +1133,33 @@ Entry to this mode runs the hooks on `term-mode-hook'."
       (setq term-input-ring (make-ring term-input-ring-size)))
   (term-update-mode-line))
 
+(defun term-insert-fake-newline (&optional count)
+  (let ((old-point (point)))
+    (term-insert-char ?\n count)
+    (put-text-property old-point (point) 'term-newline t)))
+
+(defun term-remove-fake-newlines ()
+  (goto-char (point-min))
+  (while (setq fake-newline (next-single-property-change (point)
+                                                         'term-newline))
+    (goto-char fake-newline)
+    (let (buffer-read-only)
+      (delete-char 1))))
+
+(defun term-filter-buffer-substring (beg end &optional del)
+  (let ((content (buffer-substring--filter beg end del)))
+    (with-temp-buffer
+      (insert content)
+      (term-remove-fake-newlines)
+      (buffer-string))))
+
 (defun term-reset-size (height width)
   (when (or (/= height term-height)
             (/= width term-width))
+    ;; delete all fake newlines
+    (when (/= width term-width)
+      (save-excursion
+        (term-remove-fake-newlines)))
     (let ((point (point)))
       (setq term-height height)
       (setq term-width width)
@@ -1147,7 +1172,21 @@ Entry to this mode runs the hooks on `term-mode-hook'."
       (setq term-start-line-column nil)
       (setq term-current-row nil)
       (setq term-current-column nil)
-      (goto-char point))))
+      (goto-char point))
+    (save-excursion
+      ;; add fake newlines for the lines that are currently displayed
+      (forward-line (- (term-current-row)))
+      (beginning-of-line)
+      (while (not (eobp))
+        (let* ((bol (line-beginning-position))
+               (eol (line-end-position))
+               (len (- eol bol)))
+          (when (> len width)
+            (goto-char (+ bol width))
+            (let (buffer-read-only)
+              (term-insert-fake-newline)))
+          (unless (eobp)
+            (forward-char)))))))
 
 ;; Recursive routine used to check if any string in term-kill-echo-list
 ;; matches part of the buffer before point.
@@ -2906,6 +2945,7 @@ See `term-prompt-regexp'."
                       (delete-region (point) (line-end-position))
                       (term-down 1 t)
                       (term-move-columns (- (term-current-column)))
+                      (put-text-property (1- (point)) (point) 'term-newline t)
                       (setq decoded-substring
                             (substring decoded-substring (- term-width old-column)))
                       (setq old-column 0)))
@@ -3719,7 +3759,10 @@ all pending output has been dealt with."))
 ;; if the line above point wraps around, add a ?\n to undo the wrapping.
 ;; FIXME:  Probably should be called more than it is.
 (defun term-unwrap-line ()
-  (when (not (bolp)) (insert-before-markers ?\n)))
+  (when (not (bolp))
+    (let ((old-point (point)))
+      (insert-before-markers ?\n)
+      (put-text-property old-point (point) 'term-newline t))))
 
 (defun term-erase-in-line (kind)
   (when (= kind 1) ;; erase left of point
