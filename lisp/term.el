@@ -545,6 +545,9 @@ This means text can automatically reflow if the window is resized."
   :version "24.4"
   :type 'boolean
   :group 'term)
+(make-obsolete-variable 'term-suppress-hard-newline nil
+                        "term removes newlines used for wrapping on resize and when text is copied"
+                        "27.1")
 
 ;; Where gud-display-frame should put the debugging arrow.  This is
 ;; set by the marker-filter, which scans the debugger's output for
@@ -1117,6 +1120,9 @@ Entry to this mode runs the hooks on `term-mode-hook'."
   (set (make-local-variable 'font-lock-defaults) '(nil t))
 
   (add-function :filter-return
+                (local 'filter-buffer-substring-function)
+                'term--filter-buffer-substring)
+  (add-function :filter-return
                 (local 'window-adjust-process-window-size-function)
                 (lambda (size)
                   (when size
@@ -1132,9 +1138,33 @@ Entry to this mode runs the hooks on `term-mode-hook'."
       (setq term-input-ring (make-ring term-input-ring-size)))
   (term-update-mode-line))
 
+(defun term--insert-fake-newline (&optional count)
+  (let ((old-point (point)))
+    (term-insert-char ?\n count)
+    (put-text-property old-point (point) 'term-line-wrap t)))
+
+(defun term--remove-fake-newlines ()
+  (goto-char (point-min))
+  (let (fake-newline)
+    (while (setq fake-newline (next-single-property-change (point)
+                                                           'term-line-wrap))
+      (goto-char fake-newline)
+      (let ((inhibit-read-only t))
+        (delete-char 1)))))
+
+(defun term--filter-buffer-substring (content)
+  (with-temp-buffer
+    (insert content)
+    (term--remove-fake-newlines)
+    (buffer-string)))
+
 (defun term-reset-size (height width)
   (when (or (/= height term-height)
             (/= width term-width))
+    ;; Delete all newlines used for wrapping
+    (when (/= width term-width)
+      (save-excursion
+        (term--remove-fake-newlines)))
     (let ((point (point)))
       (setq term-height height)
       (setq term-width width)
@@ -1147,7 +1177,19 @@ Entry to this mode runs the hooks on `term-mode-hook'."
       (setq term-start-line-column nil)
       (setq term-current-row nil)
       (setq term-current-column nil)
-      (goto-char point))))
+      (goto-char point))
+    (save-excursion
+      ;; Add newlines to wrap long lines that are currently displayed
+      (forward-line (- (term-current-row)))
+      (beginning-of-line)
+      (while (not (eobp))
+        (let* ((eol (save-excursion (end-of-line) (current-column))))
+          (when (> eol width)
+            (move-to-column width)
+            (let ((inhibit-read-only t))
+              (term--insert-fake-newline)))
+          (unless (eobp)
+            (forward-char)))))))
 
 ;; Recursive routine used to check if any string in term-kill-echo-list
 ;; matches part of the buffer before point.
@@ -2895,20 +2937,20 @@ See `term-prompt-regexp'."
                 (let ((old-column (term-horizontal-column))
                       (old-point (point))
                       columns)
-                  (unless term-suppress-hard-newline
-                    (while (> (+ (length decoded-substring) old-column)
-                              term-width)
-                      (insert (substring decoded-substring 0
-                                         (- term-width old-column)))
-                      ;; Since we've enough text to fill the whole line,
-                      ;; delete previous text regardless of
-                      ;; `term-insert-mode's value.
-                      (delete-region (point) (line-end-position))
-                      (term-down 1 t)
-                      (term-move-columns (- (term-current-column)))
-                      (setq decoded-substring
-                            (substring decoded-substring (- term-width old-column)))
-                      (setq old-column 0)))
+                  (while (> (+ (length decoded-substring) old-column)
+                            term-width)
+                    (insert (substring decoded-substring 0
+                                       (- term-width old-column)))
+                    ;; Since we've enough text to fill the whole line,
+                    ;; delete previous text regardless of
+                    ;; `term-insert-mode's value.
+                    (delete-region (point) (line-end-position))
+                    (term-down 1 t)
+                    (term-move-columns (- (term-current-column)))
+                    (put-text-property (1- (point)) (point) 'term-line-wrap t)
+                    (setq decoded-substring
+                          (substring decoded-substring (- term-width old-column)))
+                    (setq old-column 0))
                   (insert decoded-substring)
                   (setq term-current-column (current-column)
                         columns (- term-current-column old-column))
@@ -3719,7 +3761,10 @@ all pending output has been dealt with."))
 ;; if the line above point wraps around, add a ?\n to undo the wrapping.
 ;; FIXME:  Probably should be called more than it is.
 (defun term-unwrap-line ()
-  (when (not (bolp)) (insert-before-markers ?\n)))
+  (when (not (bolp))
+    (let ((old-point (point)))
+      (insert-before-markers ?\n)
+      (put-text-property old-point (point) 'term-line-wrap t))))
 
 (defun term-erase-in-line (kind)
   (when (= kind 1) ;; erase left of point
