@@ -2633,46 +2633,10 @@ See `term-prompt-regexp'."
   (list 'funcall 'term-vertical-motion count))
 
 ; An emulation of vertical-motion that is independent of having a window.
-; Instead, it uses the term-width variable as the logical window width.
-
+; Instead, it assumes the lines are wrapped properly.
 (defun term-buffer-vertical-motion (count)
-  (cond ((= count 0)
-	 (move-to-column (* term-width (/ (current-column) term-width)))
-	 0)
-	((> count 0)
-	 (let ((H)
-	       (todo (+ count (/ (current-column) term-width))))
-	   (end-of-line)
-	   ;; The loop iterates over buffer lines;
-	   ;; H is the number of screen lines in the current line, i.e.
-	   ;; the ceiling of dividing the buffer line width by term-width.
-	   (while (and (<= (setq H (max (/ (+ (current-column) term-width -1)
-					   term-width)
-					1))
-			   todo)
-		       (not (eobp)))
-	     (setq todo (- todo H))
-	     (forward-char) ;; Move past the ?\n
-	     (end-of-line)) ;; and on to the end of the next line.
-	   (if (and (>= todo H) (> todo 0))
-	       (+ (- count todo) H -1) ;; Hit end of buffer.
-	     (move-to-column (* todo term-width))
-	     count)))
-	(t ;; (< count 0) ;; Similar algorithm, but for upward motion.
-	 (let ((H)
-	       (todo (- count)))
-	   (while (and (<= (setq H (max (/ (+ (current-column) term-width -1)
-					   term-width)
-					1))
-			   todo)
-		       (progn (beginning-of-line)
-			      (not (bobp))))
-	     (setq todo (- todo H))
-	     (backward-char)) ;; Move to end of previous line.
-	   (if (and (>= todo H) (> todo 0))
-	       (+ count todo (- 1 H)) ;; Hit beginning of buffer.
-	     (move-to-column (* (- H todo 1) term-width))
-	     count)))))
+  (end-of-line)
+  (- count (forward-line count)))
 
 ;; The term-start-line-column variable is used as a cache.
 (defun term-start-line-column ()
